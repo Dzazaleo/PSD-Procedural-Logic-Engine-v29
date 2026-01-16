@@ -51,6 +51,7 @@ interface ProceduralContextType extends ProceduralState {
   registerKnowledge: (nodeId: string, context: KnowledgeContext) => void;
   updatePreview: (nodeId: string, handleId: string, url: string) => void;
   unregisterNode: (nodeId: string) => void;
+  purgeNodeData: (nodeId: string) => void; // Explicit Purge Action
   flushPipelineInstance: (nodeId: string, handleId: string) => void;
   triggerGlobalRefresh: () => void;
 }
@@ -520,6 +521,7 @@ export const ProceduralStoreProvider: React.FC<{ children: React.ReactNode }> = 
     registerKnowledge,
     updatePreview,
     unregisterNode,
+    purgeNodeData: unregisterNode, // Explicit alias for Deletion Protocol
     flushPipelineInstance,
     triggerGlobalRefresh
   }), [

@@ -1,10 +1,11 @@
 import React, { memo, useMemo, useEffect, useCallback, useState, useRef } from 'react';
-import { NodeProps, useEdges, useReactFlow, useNodes, useUpdateNodeInternals } from 'reactflow';
-import { PSDNodeData, SerializableLayer, TransformedPayload, TransformedLayer, LayoutStrategy } from '../types';
+import { NodeProps, useEdges, useReactFlow, useNodes, useUpdateNodeInternals, Handle, Position } from 'reactflow';
+import { PSDNodeData, SerializableLayer, TransformedPayload, TransformedLayer, LayoutStrategy, LayerOverride } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
+import { useNodeShell } from '../context/NodeShellContext';
 import { GoogleGenAI } from "@google/genai";
 import { Check, Sparkles, Info, Layers, Box, Cpu, BookOpen, Link as LinkIcon, Activity } from 'lucide-react';
-import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
+import { BaseNodeShell } from './BaseNodeShell';
 import { useSafeDelete } from '../hooks/useSafeDelete';
 
 interface InstanceData {
@@ -28,9 +29,6 @@ interface InstanceData {
   payload: TransformedPayload | null;
   strategyUsed?: boolean;
 }
-
-// ... (Sub-components: GenerativePreviewOverlay, OverrideInspector, getLayerAudit remain the same) ...
-// Re-declaring required sub-components for context self-containment in this file replacement.
 
 interface OverlayProps {
     previewUrl?: string | null;
@@ -203,6 +201,7 @@ const RemapperInstanceRow = memo(({
 }: {
     instance: InstanceData, confirmations: Record<number, string>, toggleInstanceGeneration: (idx: number) => void, handleConfirmGeneration: (idx: number, prompt: string, url?: string) => void, handleImageLoad: (idx: number) => void, isGeneratingPreview: Record<number, boolean>, displayPreviews: Record<number, string>, payloadRegistry: any, id: string, localSetting: boolean 
 }) => {
+    const { isCollapsed } = useNodeShell(); // Connect to Shell State
     const [isInspectorOpen, setInspectorOpen] = useState(false);
     const hasPreview = !!instance.payload?.previewUrl;
     const isAwaiting = instance.payload?.status === 'awaiting_confirmation';
@@ -229,8 +228,29 @@ const RemapperInstanceRow = memo(({
     else if (triangulation?.confidence_verdict === 'LOW') confidenceColor = 'text-red-300 bg-red-900/30 border-red-500/30';
 
     return (
-        <div className="relative p-3 border-b border-slate-700/50 bg-slate-800 space-y-3 hover:bg-slate-700/20 transition-colors first:rounded-t-none">
-           <div className="flex flex-col space-y-3">
+        <div className={`relative transition-all duration-300 ${isCollapsed ? 'h-0 overflow-visible p-0 border-0 opacity-100 pointer-events-none' : 'p-3 border-b border-slate-700/50 bg-slate-800 space-y-3 hover:bg-slate-700/20 first:rounded-t-none'}`}>
+           
+           {/* Internal Handles: Positioned absolutely based on collapse state */}
+           <Handle 
+                type="target" 
+                id={`source-in-${instance.index}`} 
+                position={Position.Left}
+                className={`!absolute !w-3 !h-3 !rounded-full !bg-indigo-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '-top-8 left-1' : 'top-8 -left-3'}`} 
+           />
+           <Handle 
+                type="target" 
+                id={`target-in-${instance.index}`} 
+                position={Position.Left}
+                className={`!absolute !w-3 !h-3 !rounded-full !bg-emerald-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '-top-8 left-5' : 'top-20 -left-3'}`} 
+           />
+           <Handle 
+                type="source" 
+                id={`result-out-${instance.index}`} 
+                position={Position.Right}
+                className={`!absolute !w-3 !h-3 !rounded-full !bg-emerald-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '-top-8 right-2' : 'top-1/2 -right-3'}`} 
+           />
+
+           <div className={`flex flex-col space-y-3 transition-opacity duration-200 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
               <div className="relative flex items-center justify-between group">
                  <div className="flex flex-col w-full">
                      <div className="flex items-center justify-between mb-0.5">
@@ -259,7 +279,8 @@ const RemapperInstanceRow = memo(({
                  </div>
               </div>
            </div>
-           <div className="relative mt-2 pt-3 border-t border-slate-700/50 flex flex-col space-y-2">
+           
+           <div className={`relative mt-2 pt-3 border-t border-slate-700/50 flex flex-col space-y-2 transition-opacity duration-200 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
               {instance.payload ? (
                   <div className="flex flex-col w-full pr-4">
                       <div className="flex justify-between items-center">
@@ -433,7 +454,6 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
 
             if (sourceData.ready && targetData.ready) {
                 // ... (Logic for merged overrides and transformLayers - unchanged) ...
-                // Re-implementing transform logic because it was truncated.
                 
                 const feedback = feedbackRegistry?.[id]?.[`result-out-${i}`];
                 let effectiveStrategy = sourceData.aiStrategy;
@@ -441,7 +461,8 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                      const originalOverrides = sourceData.aiStrategy.overrides || [];
                      const feedbackMap = new Map(feedback.overrides.map((o: any) => [o.layerId, o]));
                      let mergedOverrides = originalOverrides.map((original: any) => {
-                         const manual = feedbackMap.get(original.layerId) as any;
+                         // STRICT FIX: Cast to expected type to resolve "Property does not exist on type 'unknown'"
+                         const manual = feedbackMap.get(original.layerId) as LayerOverride | undefined;
                          if (manual) {
                              return {
                                  ...original,
@@ -571,26 +592,6 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
         });
     }, [instances, id, registerPayload, isGeneratingPreview, globalGenerationAllowed]);
 
-    // ... (Preview Logic and Generation Effects - same as previous) ...
-    // Truncated for brevity but logic remains intact in real file.
-
-    const inputs = useMemo<HandleDefinition[]>(() => {
-        const list: HandleDefinition[] = [];
-        for (let i = 0; i < instanceCount; i++) {
-            list.push({ id: `source-in-${i}`, label: `Src ${i}`, socketColor: '!bg-indigo-500' });
-            list.push({ id: `target-in-${i}`, label: `Slot ${i}`, socketColor: '!bg-emerald-500' });
-        }
-        return list;
-    }, [instanceCount]);
-
-    const outputs = useMemo<HandleDefinition[]>(() => {
-        const list: HandleDefinition[] = [];
-        for (let i = 0; i < instanceCount; i++) {
-            list.push({ id: `result-out-${i}`, label: `Result ${i}`, socketColor: '!bg-emerald-500' });
-        }
-        return list;
-    }, [instanceCount]);
-
     return (
         <BaseNodeShell
             nodeId={id}
@@ -598,8 +599,7 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
             subTitle="TRANSFORMER"
             headerColor="bg-slate-900"
             onDelete={deleteNode}
-            inputs={inputs}
-            outputs={outputs}
+            // Removed internal inputs/outputs management, now handled by instance rows
             className="w-[500px]"
         >
             <div className="flex flex-col">

@@ -482,7 +482,7 @@ export const ProceduralStoreProvider: React.FC<{ children: React.ReactNode }> = 
       clearEntry(resolvedRegistry, setResolvedRegistry);
       
       // Clearing payloadRegistry signals Reviewer to reset.
-      // Note: Reviewer listens to 'payload-in-{i}' which usually maps to Remapper's 'result-out-{i}'.
+      // Note: Reviewer listens to 'payload-in-{i}' which usually maps to  Remapper's 'result-out-{i}'.
       // So flushing resolvedRegistry (source for Remapper) cascades to Remapper output flush.
       
       // Explicitly clear direct payloads if any

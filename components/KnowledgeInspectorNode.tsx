@@ -1,9 +1,11 @@
 import React, { memo, useMemo, useState, useEffect, useRef } from 'react';
-import { Handle, Position, NodeProps, useEdges, useReactFlow } from 'reactflow';
+import { NodeProps, useEdges, useReactFlow } from 'reactflow';
 import { PSDNodeData } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { useKnowledgeScoper } from '../hooks/useKnowledgeScoper';
-import { Filter, Layers, Eye, ScanSearch, FileText, Copy, Check, Terminal } from 'lucide-react';
+import { Filter, Layers, Eye, ScanSearch, Copy, Check } from 'lucide-react';
+import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
+import { useSafeDelete } from '../hooks/useSafeDelete';
 
 const GLOBAL_KEY = 'GLOBAL CONTEXT';
 
@@ -13,6 +15,7 @@ export const KnowledgeInspectorNode = memo(({ id, data }: NodeProps<PSDNodeData>
   const { setNodes } = useReactFlow();
   const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const deleteNode = useSafeDelete(id);
 
   // Local state for UI, initialized from persisted data if available
   const [selectedContainer, setSelectedContainer] = useState<string>(data.inspectorState?.selectedContainer || GLOBAL_KEY);
@@ -83,38 +86,20 @@ export const KnowledgeInspectorNode = memo(({ id, data }: NodeProps<PSDNodeData>
       }
   };
 
+  const inputs = useMemo<HandleDefinition[]>(() => [
+      { id: 'knowledge-in', label: 'Knowledge', socketColor: '!bg-teal-500' }
+  ], []);
+
   return (
-    <div className="w-96 bg-slate-950 rounded-lg shadow-2xl border border-teal-500/50 font-sans flex flex-col overflow-hidden transition-all hover:border-teal-400 hover:shadow-[0_0_20px_rgba(20,184,166,0.15)] group">
-      
-      {/* Header */}
-      <div className="bg-slate-900 p-2 border-b border-teal-500/30 flex items-center justify-between shrink-0 relative overflow-hidden">
-         {/* Scanline Effect */}
-         <div className="absolute top-0 left-0 w-full h-[1px] bg-teal-500/30 animate-scan-x pointer-events-none"></div>
-         
-         <div className="flex items-center space-x-2 z-10">
-           <div className="p-1.5 rounded bg-teal-500/10 border border-teal-500/30">
-             <Terminal className="w-4 h-4 text-teal-400" />
-           </div>
-           <div className="flex flex-col leading-none">
-             <span className="text-sm font-bold text-teal-100 tracking-tight">Knowledge Inspector</span>
-             <span className="text-[9px] text-teal-500 font-mono font-medium">SCOPING ENGINE v1.0</span>
-           </div>
-         </div>
-         <div className="px-2 py-0.5 rounded border border-teal-500/20 bg-black/40 text-[9px] text-teal-400 font-mono shadow-inner">
-             {availableScopes.length - 1} ACTIVE ZONES
-         </div>
-      </div>
-
-      {/* Input Handle */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="knowledge-in"
-        className="!w-3 !h-3 !-left-1.5 !top-10 !bg-teal-500 !border-2 !border-slate-900 shadow-[0_0_10px_#14b8a6]"
-        title="Input: Knowledge Context"
-      />
-
-      {/* Controls & Filter */}
+    <BaseNodeShell
+        nodeId={id}
+        title="Knowledge Inspector"
+        subTitle="SCOPING ENGINE"
+        headerColor="bg-slate-900"
+        onDelete={deleteNode}
+        inputs={inputs}
+        className="w-96"
+    >
       <div className="p-3 bg-slate-900/80 space-y-3 relative">
           
           {/* Container Selector */}
@@ -225,17 +210,6 @@ export const KnowledgeInspectorNode = memo(({ id, data }: NodeProps<PSDNodeData>
           )}
 
       </div>
-      
-      <style>{`
-        @keyframes scan-x {
-            0% { transform: translateX(-100%); opacity: 0; }
-            50% { opacity: 1; }
-            100% { transform: translateX(100%); opacity: 0; }
-        }
-        .animate-scan-x {
-            animation: scan-x 3s ease-in-out infinite;
-        }
-      `}</style>
-    </div>
+    </BaseNodeShell>
   );
 });

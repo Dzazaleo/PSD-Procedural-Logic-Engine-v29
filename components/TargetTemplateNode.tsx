@@ -1,9 +1,11 @@
-import React, { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { Handle, Position, useReactFlow } from 'reactflow';
+import React, { memo, useCallback, useState, useRef, useEffect, useMemo } from 'react';
+import { useReactFlow } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import { parsePsdFile, extractTemplateMetadata, getSemanticTheme } from '../services/psdService';
 import { PSDNodeData, TemplateMetadata } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
+import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
+import { useSafeDelete } from '../hooks/useSafeDelete';
 
 const TargetTemplatePreview: React.FC<{ metadata: TemplateMetadata }> = ({ metadata }) => {
   const { canvas, containers } = metadata;
@@ -52,6 +54,7 @@ export const TargetTemplateNode = memo(({ data, id }: NodeProps<PSDNodeData>) =>
 
   // Connect to store
   const { psdRegistry, registerPsd, registerTemplate, unregisterNode } = useProceduralStore();
+  const deleteNode = useSafeDelete(id);
 
   // Determine State
   const isDataLoaded = !!data.template;
@@ -133,27 +136,28 @@ export const TargetTemplateNode = memo(({ data, id }: NodeProps<PSDNodeData>) =>
   const handleBoxClick = () => fileInputRef.current?.click();
   const isConnectable = isDataLoaded && hasBinary;
 
-  return (
-    // Removed overflow-hidden to prevent clipping of the output handle
-    <div className={`w-72 rounded-lg shadow-xl border font-sans transition-colors relative ${isDehydrated ? 'bg-orange-950/30 border-orange-500/50' : 'bg-slate-800 border-slate-600'}`}>
-      {/* Header - Added rounded-t-lg since parent overflow is no longer hidden */}
-      <div className={`p-2 border-b flex items-center justify-between rounded-t-lg ${isDehydrated ? 'bg-orange-900/50 border-orange-700' : 'bg-emerald-900 border-emerald-800'}`}>
-        <div className="flex items-center space-x-2">
-           {isDehydrated ? (
-             <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-             </svg>
-          ) : (
-            <svg className="w-4 h-4 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-            </svg>
-          )}
-          <span className={`text-sm font-semibold ${isDehydrated ? 'text-orange-100' : 'text-emerald-100'}`}>
-            {isDehydrated ? 'Binary Data Missing' : 'Target Template'}
-          </span>
-        </div>
-      </div>
+  // Define Output Handle
+  const outputs = useMemo<HandleDefinition[]>(() => [
+    {
+        id: 'target-metadata-out',
+        label: 'Template Data',
+        socketColor: isConnectable ? '!bg-emerald-500 !border-white' : '!bg-slate-600 !border-slate-400'
+    }
+  ], [isConnectable]);
 
+  // Visual Styling
+  const headerColor = isDehydrated ? 'bg-orange-900/50 border-orange-700' : 'bg-emerald-900 border-emerald-800';
+
+  return (
+    <BaseNodeShell
+      nodeId={id}
+      title={isDehydrated ? 'Binary Data Missing' : 'Target Template'}
+      subTitle="LAYOUT DEF"
+      headerColor={headerColor}
+      onDelete={deleteNode}
+      outputs={outputs}
+      className="w-72"
+    >
       <div className="p-4">
         <input type="file" accept=".psd" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
 
@@ -236,17 +240,6 @@ export const TargetTemplateNode = memo(({ data, id }: NodeProps<PSDNodeData>) =>
           </div>
         )}
       </div>
-
-      {/* Output Handle - Centered Right */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="target-metadata-out"
-        isConnectable={isConnectable}
-        title="Output: Target Template Metadata"
-        className={`!w-3 !h-3 !border-2 transition-colors duration-300 ${isConnectable ? '!bg-emerald-500 !border-white' : '!bg-slate-600 !border-slate-400'}`}
-        style={{ right: -6, top: '50%', transform: 'translateY(-50%)' }}
-      />
-    </div>
+    </BaseNodeShell>
   );
 });

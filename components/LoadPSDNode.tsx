@@ -1,9 +1,11 @@
-import React, { memo, useCallback, useState, useRef, useEffect } from 'react';
-import { Handle, Position, useReactFlow } from 'reactflow';
+import React, { memo, useCallback, useState, useRef, useEffect, useMemo } from 'react';
+import { useReactFlow } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import { parsePsdFile, extractTemplateMetadata, mapLayersToContainers, getCleanLayerTree, getSemanticTheme } from '../services/psdService';
 import { PSDNodeData, TemplateMetadata } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
+import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
+import { useSafeDelete } from '../hooks/useSafeDelete';
 
 // Sub-component for visualizing the template structure
 const TemplatePreview: React.FC<{ metadata: TemplateMetadata }> = ({ metadata }) => {
@@ -66,6 +68,7 @@ export const LoadPSDNode = memo(({ data, id }: NodeProps<PSDNodeData>) => {
   
   // Connect to Procedural Store
   const { psdRegistry, registerPsd, registerTemplate, unregisterNode, triggerGlobalRefresh } = useProceduralStore();
+  const deleteNode = useSafeDelete(id);
 
   // Determine State
   const isDataLoaded = !!data.template;
@@ -156,28 +159,28 @@ export const LoadPSDNode = memo(({ data, id }: NodeProps<PSDNodeData>) => {
     fileInputRef.current?.click();
   };
 
-  return (
-    // Removed overflow-hidden to prevent clipping of the output handle
-    <div className={`w-72 rounded-lg shadow-xl border font-sans transition-colors relative ${isDehydrated ? 'bg-orange-950/30 border-orange-500/50' : 'bg-slate-800 border-slate-600'}`}>
-      {/* Title Header - Added rounded-t-lg since parent overflow is no longer hidden */}
-      <div className={`p-2 border-b flex items-center justify-between rounded-t-lg ${isDehydrated ? 'bg-orange-900/50 border-orange-700' : 'bg-slate-900 border-slate-700'}`}>
-        <div className="flex items-center space-x-2">
-          {isDehydrated ? (
-             <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-             </svg>
-          ) : (
-            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-          )}
-          <span className={`text-sm font-semibold ${isDehydrated ? 'text-orange-100' : 'text-slate-200'}`}>
-             {isDehydrated ? 'Missing Binary Data' : 'Load PSD'}
-          </span>
-        </div>
-      </div>
+  // Define Output Handle
+  const outputs = useMemo<HandleDefinition[]>(() => [
+    {
+      id: 'psd-output',
+      label: 'Layer Tree',
+      socketColor: isDataLoaded ? '!bg-blue-500 !border-white' : '!bg-slate-600 !border-slate-400',
+    }
+  ], [isDataLoaded]);
 
-      {/* Body */}
+  // Visual Styling based on state
+  const headerColor = isDehydrated ? 'bg-orange-900/50 border-orange-700' : 'bg-slate-900 border-slate-700';
+
+  return (
+    <BaseNodeShell
+      nodeId={id}
+      title={isDehydrated ? 'Missing Binary Data' : 'Load PSD'}
+      subTitle="SOURCE BINARY"
+      headerColor={headerColor}
+      onDelete={deleteNode}
+      outputs={outputs}
+      className="w-72"
+    >
       <div className="p-4">
         <input
           type="file"
@@ -291,17 +294,6 @@ export const LoadPSDNode = memo(({ data, id }: NodeProps<PSDNodeData>) => {
           </div>
         )}
       </div>
-
-      {/* Output Handle - Centered Right */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="psd-output"
-        isConnectable={isDataLoaded}
-        title="Output: Serializable Template Metadata & Design Layers"
-        className={`!w-3 !h-3 !border-2 transition-colors duration-300 ${isDataLoaded ? '!bg-blue-500 !border-white hover:!bg-blue-400' : '!bg-slate-600 !border-slate-400'}`}
-        style={{ right: -6, top: '50%', transform: 'translateY(-50%)' }}
-      />
-    </div>
+    </BaseNodeShell>
   );
 });

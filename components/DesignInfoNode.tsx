@@ -1,10 +1,12 @@
 import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
-import { Handle, Position, useReactFlow, useEdges, useNodes, NodeResizer } from 'reactflow';
-import type { NodeProps, Node } from 'reactflow';
+import { useReactFlow, useEdges, useNodes, NodeResizer } from 'reactflow';
+import type { NodeProps } from 'reactflow';
 import { SerializableLayer, PSDNodeData } from '../types';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { findLayerByPath, getOpticalBounds } from '../services/psdService';
-import { Scan, Box, Layers, MousePointer2 } from 'lucide-react';
+import { Box, Layers, MousePointer2 } from 'lucide-react';
+import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
+import { useSafeDelete } from '../hooks/useSafeDelete';
 
 // --- VISUALIZATION SUB-COMPONENT ---
 interface LayerPreviewProps {
@@ -75,28 +77,15 @@ const LayerPreview: React.FC<LayerPreviewProps> = ({ layer, sourceNodeId }) => {
         // --- CALCULATE & DRAW OVERLAYS ---
         
         // 1. Geometric Bounds (Blue)
-        // ag-psd 'layer.coords' are Global. We need Local relative to the Canvas.
-        // If layer.left/top aligns with canvas 0,0:
         const geoW = layer.coords.w;
         const geoH = layer.coords.h;
-        // Check for mismatch (The "Text Layer" Issue)
-        // If metadata width != canvas width, assume centered or top-left?
-        // Typically ag-psd canvas includes the full visual. 
-        // We draw the geometric box "as reported" relative to the visual.
-        // NOTE: This assumes the visual canvas START point matches layer.left/top.
         
         ctx.strokeStyle = '#60a5fa'; // Blue-400
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 2]);
-        // If the geometric box is smaller than the canvas, it's likely centered or top-left.
-        // For visualization, we draw it relative to the Image Origin (offsetX, offsetY).
-        // A mismatch implies the canvas extended beyond the geom bounds.
-        // To visualize this "Spill", we assume the geom box is at 0,0 of the canvas 
-        // unless we have specific offset info (which ag-psd doesn't easily give for internal offsets).
         ctx.strokeRect(offsetX, offsetY, geoW * scale, geoH * scale);
         
         // 2. Optical Bounds (Red) - The "Trim" Box
-        // We run the scanner LIVE on the raw canvas data
         const opticalScan = getOpticalBounds(agLayer.canvas.getContext('2d')!, imgW, imgH);
         
         if (opticalScan) {
@@ -251,6 +240,7 @@ export const DesignInfoNode = memo(({ id }: NodeProps) => {
   const edges = useEdges();
   const nodes = useNodes();
   const [selectedLayer, setSelectedLayer] = useState<SerializableLayer | null>(null);
+  const deleteNode = useSafeDelete(id);
   
   const sourceEdge = useMemo(() => edges.find(e => e.target === id), [edges, id]);
   const sourceNode = useMemo(() => 
@@ -259,56 +249,68 @@ export const DesignInfoNode = memo(({ id }: NodeProps) => {
 
   const designLayers = (sourceNode?.data as PSDNodeData)?.designLayers;
 
+  const inputs = useMemo<HandleDefinition[]>(() => [
+      { id: 'input', label: 'Layer Tree', socketColor: '!bg-blue-500' }
+  ], []);
+
   return (
-    <div className="w-[500px] bg-slate-800 rounded-lg shadow-xl border border-slate-600 overflow-hidden font-sans flex flex-col h-[450px]">
-      <NodeResizer minWidth={500} minHeight={450} isVisible={true} handleStyle={{ background: 'transparent', border: 'none' }} lineStyle={{ border: 'none' }} />
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !top-8 !bg-blue-500 !border-2 !border-slate-800" title="Input" />
-
-      <div className="bg-slate-900 p-2 border-b border-slate-700 flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-2">
-          <Layers className="w-4 h-4 text-orange-400" />
-          <span className="text-sm font-semibold text-slate-200">Design Inspector</span>
+    <BaseNodeShell
+        nodeId={id}
+        title="Design Inspector"
+        subTitle="METADATA"
+        headerColor="bg-slate-900"
+        onDelete={deleteNode}
+        inputs={inputs}
+        className="w-[500px]" // Initial width
+    >
+      <div className="h-[450px] relative flex flex-col">
+        <NodeResizer minWidth={500} minHeight={450} isVisible={true} handleStyle={{ background: 'transparent', border: 'none' }} lineStyle={{ border: 'none' }} />
+        
+        <div className="bg-slate-900/50 p-2 border-b border-slate-700 flex items-center justify-between shrink-0">
+            <div className="flex items-center space-x-2">
+            <Layers className="w-4 h-4 text-orange-400" />
+            <span className="text-xs text-slate-400 font-medium">
+                {selectedLayer ? `Selected: ${selectedLayer.name}` : 'Select a Layer'}
+            </span>
+            </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono">
-            {selectedLayer ? `SELECTED: ${selectedLayer.name}` : 'NO SELECTION'}
+
+        <div className="flex flex-1 overflow-hidden">
+            {/* LEFT: Tree View */}
+            <div className="w-1/2 overflow-y-auto custom-scrollbar border-r border-slate-700 bg-slate-800/50 p-1">
+                {!designLayers ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-500 text-xs gap-2">
+                    <Box className="w-6 h-6 opacity-50" />
+                    <span>No Layers Loaded</span>
+                </div>
+                ) : (
+                <div className="py-1">
+                    {/* REVERSED: Render top-most layers first (Photoshop Style) */}
+                    {[...designLayers].reverse().map(layer => (
+                    <LayerItem 
+                            key={layer.id} 
+                            node={layer} 
+                            isSelected={selectedLayer?.id === layer.id} 
+                            onSelect={setSelectedLayer} 
+                    />
+                    ))}
+                </div>
+                )}
+            </div>
+
+            {/* RIGHT: Visual Preview */}
+            <div className="w-1/2 flex flex-col bg-black/20">
+                {selectedLayer && sourceNode ? (
+                    <LayerPreview layer={selectedLayer} sourceNodeId={sourceNode.id} />
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-600 gap-2">
+                        <MousePointer2 className="w-8 h-8 opacity-20" />
+                        <span className="text-xs">Select a layer to inspect</span>
+                    </div>
+                )}
+            </div>
         </div>
       </div>
-
-      <div className="flex flex-1 overflow-hidden">
-          {/* LEFT: Tree View */}
-          <div className="w-1/2 overflow-y-auto custom-scrollbar border-r border-slate-700 bg-slate-800/50 p-1">
-            {!designLayers ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-500 text-xs gap-2">
-                <Box className="w-6 h-6 opacity-50" />
-                <span>No Layers Loaded</span>
-              </div>
-            ) : (
-              <div className="py-1">
-                 {/* REVERSED: Render top-most layers first (Photoshop Style) */}
-                 {[...designLayers].reverse().map(layer => (
-                   <LayerItem 
-                        key={layer.id} 
-                        node={layer} 
-                        isSelected={selectedLayer?.id === layer.id} 
-                        onSelect={setSelectedLayer} 
-                   />
-                 ))}
-              </div>
-            )}
-          </div>
-
-          {/* RIGHT: Visual Preview */}
-          <div className="w-1/2 flex flex-col bg-black/20">
-              {selectedLayer && sourceNode ? (
-                  <LayerPreview layer={selectedLayer} sourceNodeId={sourceNode.id} />
-              ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-slate-600 gap-2">
-                      <MousePointer2 className="w-8 h-8 opacity-20" />
-                      <span className="text-xs">Select a layer to inspect</span>
-                  </div>
-              )}
-          </div>
-      </div>
-    </div>
+    </BaseNodeShell>
   );
 });

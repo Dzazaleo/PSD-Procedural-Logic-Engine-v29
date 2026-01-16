@@ -1,10 +1,12 @@
-import React, { memo, useCallback, useState, useEffect, useRef } from 'react';
-import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
+import React, { memo, useCallback, useState, useEffect, useRef, useMemo } from 'react';
+import { NodeProps, useReactFlow } from 'reactflow';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { PSDNodeData, VisualAnchor, KnowledgeContext } from '../types';
-import { BookOpen, Image as ImageIcon, FileText, Trash2, UploadCloud, BrainCircuit, Loader2, CheckCircle2, AlertCircle, X, Layers, RefreshCw } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, FileText, Trash2, UploadCloud, CheckCircle2, Loader2, X, Layers, RefreshCw } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { GoogleGenAI } from "@google/genai";
+import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
+import { useSafeDelete } from '../hooks/useSafeDelete';
 
 // Initialize PDF Worker from CDN to handle parsing off the main thread
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs';
@@ -122,6 +124,7 @@ export const KnowledgeNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
 
   const { registerKnowledge, unregisterNode } = useProceduralStore();
   const { setNodes } = useReactFlow();
+  const deleteNode = useSafeDelete(id);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -336,31 +339,39 @@ export const KnowledgeNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
   const hasContent = hasLocalStaged || persistedAnchors.length > 0 || (stagedFiles.some(f => f.type === 'pdf' && f.status === 'complete'));
   const isSyncActive = !!lastSynced;
 
-  return (
-    <div className={`w-[300px] bg-slate-900 rounded-lg shadow-2xl border transition-all duration-300 font-sans flex flex-col overflow-hidden ${isSyncActive ? 'border-teal-500 shadow-[0_0_15px_rgba(20,184,166,0.2)]' : 'border-teal-500/50'}`}>
-      
-      {/* Header */}
-      <div className="bg-teal-900/30 p-2 border-b border-teal-800 flex items-center justify-between shrink-0">
-         <div className="flex items-center space-x-2">
-           <div className={`p-1.5 rounded-full border transition-all duration-500 ${isDistilling ? 'bg-teal-400 border-teal-200 animate-pulse' : 'bg-teal-500/20 border-teal-500/50'}`}>
-             <BrainCircuit className={`w-4 h-4 ${isDistilling ? 'text-teal-900' : 'text-teal-300'}`} />
-           </div>
-           <div className="flex flex-col leading-none">
-             <span className="text-sm font-bold text-teal-100">Project Brain</span>
-             <span className="text-[9px] text-teal-400">Context Engine</span>
-           </div>
-         </div>
-         <div className="flex items-center space-x-2">
-             {lastSynced && (
-                 <span className="text-[8px] text-teal-300 font-mono animate-pulse">LIVE</span>
-             )}
-             <span className="text-[9px] text-teal-500/70 font-mono border border-teal-800 px-1 rounded bg-black/20">KNOWLEDGE</span>
-         </div>
-      </div>
+  const outputs = useMemo<HandleDefinition[]>(() => [
+      { id: 'knowledge-out', label: 'Context', socketColor: '!bg-teal-500' }
+  ], []);
 
-      {/* Body */}
+  return (
+    <BaseNodeShell
+        nodeId={id}
+        title="Project Brain"
+        subTitle="CONTEXT ENGINE"
+        headerColor="bg-teal-900"
+        onDelete={deleteNode}
+        outputs={outputs}
+        className="w-[300px]"
+        isPolished={isSyncActive}
+    >
       <div className="p-3 bg-slate-800 space-y-3">
         
+        {/* Status Indicators (Moved from Header to Body for Shell Compatibility) */}
+        {isSyncActive && (
+            <div className="flex items-center justify-between bg-teal-900/20 px-2 py-1.5 rounded border border-teal-500/30">
+                <span className="text-[9px] text-teal-400 font-mono flex items-center gap-1">
+                    <span className="relative flex h-1.5 w-1.5 mr-1">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-teal-500"></span>
+                    </span>
+                    LIVE SYNC
+                </span>
+                <span className="text-[8px] text-teal-500/50">
+                    {new Date(lastSynced!).toLocaleTimeString()}
+                </span>
+            </div>
+        )}
+
         {/* Drop Zone */}
         <div 
             onDragOver={onDragOver}
@@ -395,7 +406,7 @@ export const KnowledgeNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                 </div>
             ) : (
                 <>
-                    {/* Persisted Rules Summary (Re-hydration view) */}
+                    {/* Persisted Rules Summary */}
                     {data.knowledgeContext && !hasLocalStaged && (
                         <div className="p-2 bg-teal-900/20 border border-teal-800/50 rounded flex items-center space-x-2">
                             <CheckCircle2 className="w-3 h-3 text-teal-500" />
@@ -476,7 +487,7 @@ export const KnowledgeNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                             <div className="absolute top-0 right-0 bg-teal-500 text-white text-[7px] font-bold px-1 rounded-bl leading-none shadow-sm">
                                 REF
                             </div>
-                            {/* Remove Overlay (Only for staged files, persisted ones are immutable in this view unless cleared) */}
+                            {/* Remove Overlay */}
                             {!file.isPersisted && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
@@ -522,26 +533,8 @@ export const KnowledgeNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                      </>
                  )}
              </button>
-             
-             {lastSynced && (
-                 <div className="text-[8px] text-teal-500/70 text-center mt-1 font-mono">
-                     Last Synced: {new Date(lastSynced).toLocaleTimeString()}
-                 </div>
-             )}
         </div>
-
       </div>
-
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="knowledge-out"
-        className={`!w-3 !h-3 !-right-1.5 !border-2 transition-all duration-500
-            ${isSyncActive ? '!bg-teal-500 !border-white shadow-[0_0_10px_#14b8a6]' : '!bg-slate-600 !border-slate-400'}
-        `}
-        style={{ top: '50%', transform: 'translateY(-50%)' }}
-        title="Output: Global Knowledge Context"
-      />
-    </div>
+    </BaseNodeShell>
   );
 });

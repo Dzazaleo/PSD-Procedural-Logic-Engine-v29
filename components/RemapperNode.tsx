@@ -441,7 +441,7 @@ export const RemapperNode = memo(({ id, data }: NodeProps<PSDNodeData>) => {
                      const originalOverrides = sourceData.aiStrategy.overrides || [];
                      const feedbackMap = new Map(feedback.overrides.map((o: any) => [o.layerId, o]));
                      let mergedOverrides = originalOverrides.map((original: any) => {
-                         const manual = feedbackMap.get(original.layerId);
+                         const manual = feedbackMap.get(original.layerId) as any;
                          if (manual) {
                              return {
                                  ...original,

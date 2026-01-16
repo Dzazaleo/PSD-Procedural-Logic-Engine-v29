@@ -1,12 +1,14 @@
 import React, { memo, useMemo, useEffect } from 'react';
-import { Handle, Position, useEdges, useNodes } from 'reactflow';
-import type { NodeProps, Node } from 'reactflow';
-import { PSDNodeData } from '../types';
+import { useEdges } from 'reactflow';
+import type { NodeProps } from 'reactflow';
 import { useProceduralStore } from '../store/ProceduralContext';
 import { getSemanticThemeObject } from '../services/psdService';
+import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
+import { useSafeDelete } from '../hooks/useSafeDelete';
 
 export const TargetSplitterNode = memo(({ id }: NodeProps) => {
   const edges = useEdges();
+  const deleteNode = useSafeDelete(id);
   
   // Connect to Store
   const { templateRegistry, registerTemplate, unregisterNode } = useProceduralStore();
@@ -51,37 +53,56 @@ export const TargetSplitterNode = memo(({ id }: NodeProps) => {
 
   const isTemplateConnected = !!template;
 
+  // Define Inputs: Template Input + Dynamic Slot Inputs
+  const inputs = useMemo<HandleDefinition[]>(() => {
+      const base: HandleDefinition[] = [
+          { id: 'template-input', label: 'Target Template', socketColor: '!bg-emerald-500' }
+      ];
+      
+      const slots = sortedContainers.map((c, i) => {
+          const isFilled = connectedSlots.has(c.name);
+          const theme = getSemanticThemeObject(c.name, i);
+          // If filled, use the theme color for the socket to indicate activity
+          const socketColor = isFilled ? theme.dot.replace('bg-', '!bg-') : '!bg-slate-700';
+          
+          return {
+              id: c.name,
+              label: c.name,
+              socketColor: `${socketColor} !border-2`
+          };
+      });
+
+      return [...base, ...slots];
+  }, [sortedContainers, connectedSlots]);
+
+  // Define Outputs: Slot Bounds
+  const outputs = useMemo<HandleDefinition[]>(() => 
+      sortedContainers.map(c => ({
+          id: `slot-bounds-${c.name}`,
+          label: 'Bounds',
+          socketColor: '!bg-emerald-500'
+      }))
+  , [sortedContainers]);
+
+  // Calculate dynamic height based on container count to hint BaseNodeShell (optional, but good for alignment)
+  // BaseNodeShell handles stack with spacing.
+
   return (
-    <div className="min-w-[260px] bg-slate-800 rounded-lg shadow-xl border border-slate-600 overflow-hidden font-sans">
-       {/* Input Handle for Template Definition */}
-       <Handle
-        type="target"
-        position={Position.Left}
-        id="template-input"
-        className="!w-3 !h-3 !top-8 !bg-emerald-500 !border-2 !border-slate-800"
-        title="Input: Target Template Metadata"
-      />
-
-      {/* Header */}
-      <div className="bg-emerald-900 p-2 border-b border-emerald-800 flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <svg className="w-4 h-4 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-          <span className="text-sm font-semibold text-emerald-100">Target Splitter</span>
-        </div>
-        <span className="text-[10px] text-emerald-300/70 font-mono px-1">ASSEMBLY</span>
-      </div>
-
-      {/* Body */}
-      <div className="p-2 space-y-2 bg-slate-800">
+    <BaseNodeShell
+        nodeId={id}
+        title="Target Splitter"
+        subTitle="ASSEMBLY"
+        headerColor="bg-emerald-900"
+        onDelete={deleteNode}
+        inputs={inputs}
+        outputs={outputs}
+        className="w-64"
+    >
+      <div className="p-2 space-y-2">
         
         {/* State: No Template Connected */}
         {!isTemplateConnected && (
           <div className="flex flex-col items-center justify-center py-6 px-4 text-slate-500 border border-dashed border-slate-700 rounded bg-slate-900/30">
-             <svg className="w-8 h-8 mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-             </svg>
              <span className="text-xs text-center">Connect Target Template to initialize slots</span>
           </div>
         )}
@@ -89,67 +110,43 @@ export const TargetSplitterNode = memo(({ id }: NodeProps) => {
         {/* State: Template Connected, Render Slots */}
         {isTemplateConnected && (
           <div className="flex flex-col space-y-3">
-             <div className="text-[10px] text-slate-400 font-medium px-1 flex justify-between">
+             <div className="text-[9px] text-slate-400 font-medium px-1 flex justify-between">
                 <span>SLOT DEFINITIONS</span>
                 <span>{connectedSlots.size} / {sortedContainers.length} Filled</span>
              </div>
 
+             {/* Spacer for the 'Target Template' input handle to align visually below it */}
+             <div className="h-2"></div>
+
              <div className="space-y-1">
-               {sortedContainers.length === 0 ? (
-                 <div className="text-xs text-slate-500 p-2 italic">Target has no containers</div>
-               ) : (
-                 sortedContainers.map((container, index) => {
-                   const isFilled = connectedSlots.has(container.name);
-                   const theme = getSemanticThemeObject(container.name, index);
-                   
-                   return (
-                     <div 
-                       key={container.id} 
-                       className={`relative flex items-center justify-between p-2 pl-4 rounded border transition-colors ${
-                         isFilled 
-                           ? `${theme.bg.replace('/20', '/10')} ${theme.border.replace('border-', 'border-opacity-30 border-')}` 
-                           : 'bg-slate-900/30 border-slate-700/50'
-                       }`}
-                     >
-                       {/* Input Handle for specific slot (Assembly In) */}
-                       <Handle
-                         type="target"
-                         position={Position.Left}
-                         id={container.name} 
-                         className={`!w-3 !h-3 !-left-1.5 transition-colors duration-300 ${
-                           isFilled 
-                             ? `${theme.dot} !border-white` 
-                             : '!bg-slate-700 !border-slate-500 hover:!bg-slate-600'
-                         }`}
-                         style={{ top: '50%', transform: 'translateY(-50%)' }}
-                       />
-
-                       <div className="flex flex-col leading-tight overflow-hidden w-full mr-4">
-                          <span className={`text-xs font-medium truncate ${isFilled ? theme.text : 'text-slate-400'}`}>
-                            {container.name}
-                          </span>
-                          <span className="text-[9px] text-slate-600 font-mono">
-                             {Math.round(container.normalized.w * 100)}% x {Math.round(container.normalized.h * 100)}%
-                          </span>
-                       </div>
-
-                       {/* Output Handle for Bounds (Coords Out) */}
-                       <Handle
-                         type="source"
-                         position={Position.Right}
-                         id={`slot-bounds-${container.name}`}
-                         className={`!w-3 !h-3 !-right-1.5 transition-colors duration-300 !bg-emerald-500 !border-white hover:!bg-emerald-400`}
-                         style={{ top: '50%', transform: 'translateY(-50%)' }}
-                         title={`Export Bounds: ${container.name}`}
-                       />
+               {sortedContainers.map((container, index) => {
+                 const isFilled = connectedSlots.has(container.name);
+                 const theme = getSemanticThemeObject(container.name, index);
+                 
+                 return (
+                   <div 
+                     key={container.id} 
+                     className={`flex items-center justify-between p-1.5 pl-2 rounded border transition-colors h-7 ${
+                       isFilled 
+                         ? `${theme.bg.replace('/20', '/10')} ${theme.border.replace('border-', 'border-opacity-30 border-')}` 
+                         : 'bg-slate-900/30 border-slate-700/50'
+                     }`}
+                   >
+                     <div className="flex flex-col leading-none overflow-hidden w-full mr-2">
+                        <span className={`text-[10px] font-medium truncate ${isFilled ? theme.text : 'text-slate-400'}`}>
+                          {container.name}
+                        </span>
+                        <span className="text-[8px] text-slate-600 font-mono">
+                           {Math.round(container.normalized.w * 100)}% x {Math.round(container.normalized.h * 100)}%
+                        </span>
                      </div>
-                   );
-                 })
-               )}
+                   </div>
+                 );
+               })}
              </div>
           </div>
         )}
       </div>
-    </div>
+    </BaseNodeShell>
   );
 });

@@ -5,7 +5,7 @@ import { useProceduralStore } from '../store/ProceduralContext';
 import { useNodeShell } from '../context/NodeShellContext';
 import { GoogleGenAI } from "@google/genai";
 import { Check, Sparkles, Info, Layers, Box, Cpu, BookOpen, Link as LinkIcon, Activity } from 'lucide-react';
-import { BaseNodeShell } from './BaseNodeShell';
+import { BaseNodeShell, HandleDefinition } from './BaseNodeShell';
 import { useSafeDelete } from '../hooks/useSafeDelete';
 
 interface InstanceData {
@@ -235,19 +235,19 @@ const RemapperInstanceRow = memo(({
                 type="target" 
                 id={`source-in-${instance.index}`} 
                 position={Position.Left}
-                className={`!absolute !w-3 !h-3 !rounded-full !bg-indigo-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '-top-8 left-1' : 'top-8 -left-3'}`} 
+                className={`!absolute !w-3 !h-3 !rounded-full !bg-indigo-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '!left-2 !-top-8' : '!-left-3 !top-10'}`} 
            />
            <Handle 
                 type="target" 
                 id={`target-in-${instance.index}`} 
                 position={Position.Left}
-                className={`!absolute !w-3 !h-3 !rounded-full !bg-emerald-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '-top-8 left-5' : 'top-20 -left-3'}`} 
+                className={`!absolute !w-3 !h-3 !rounded-full !bg-emerald-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '!left-6 !-top-8' : '!-left-3 !top-24'}`} 
            />
            <Handle 
                 type="source" 
                 id={`result-out-${instance.index}`} 
                 position={Position.Right}
-                className={`!absolute !w-3 !h-3 !rounded-full !bg-emerald-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '-top-8 right-2' : 'top-1/2 -right-3'}`} 
+                className={`!absolute !w-3 !h-3 !rounded-full !bg-emerald-500 !border-2 !border-slate-800 z-50 pointer-events-auto transition-all duration-300 ${isCollapsed ? '!right-2 !-top-8' : '!-right-3 !top-1/2 !-translate-y-1/2'}`} 
            />
 
            <div className={`flex flex-col space-y-3 transition-opacity duration-200 ${isCollapsed ? 'opacity-0 hidden' : 'opacity-100'}`}>
